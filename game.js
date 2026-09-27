@@ -148,13 +148,19 @@ class Coin {
         ctx.closePath();
         ctx.clip();
 
-        ctx.drawImage(
-            coinImg,
-            this.x - this.radius,
-            this.y - this.radius,
-            this.radius * 2,
-            this.radius * 2
-        );
+        if (coinImg.complete && coinImg.naturalWidth !== 0) {
+            ctx.drawImage(
+                coinImg,
+                this.x - this.radius,
+                this.y - this.radius,
+                this.radius * 2,
+                this.radius * 2
+            );
+        } else {
+            // Fallback if image fails to load
+            ctx.fillStyle = '#f1c40f';
+            ctx.fill();
+        }
         ctx.restore();
     }
 }
