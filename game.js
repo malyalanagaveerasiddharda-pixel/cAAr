@@ -5,10 +5,10 @@ const coinValDisplay = document.getElementById('coin-val');
 
 // Image assets
 const coinImg = new Image();
-coinImg.src = 'file:///C:/Users/siddu/Pictures/Screenshots/Screenshot 2026-09-27 163420.png';
+coinImg.src = 'Screenshot 2026-09-27 163420.png';
 
 // Audio assets
-const coinSound = new Audio('file:///C:/Users/siddu/OneDrive/allu arjun laugh.mp3.mpeg');
+const coinSound = new Audio('allu arjun laugh.mp3.mpeg');
 
 // Game State
 let totalCoins = 0;
