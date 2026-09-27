@@ -27,6 +27,30 @@ const keys = {};
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
 
+// Touch state
+const touch = {
+    active: false,
+    x: 0,
+    y: 0
+};
+
+canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    touch.active = true;
+    touch.x = e.touches[0].clientX;
+    touch.y = e.touches[0].clientY;
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    touch.x = e.touches[0].clientX;
+    touch.y = e.touches[0].clientY;
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => {
+    touch.active = false;
+});
+
 class Car {
     constructor(x, y, color = '#e74c3c', isPlayer = true) {
         this.x = x;
@@ -47,36 +71,52 @@ class Car {
 
     update() {
         if (this.isPlayer) {
-            // Player Controls
-            let currentAccel = this.acceleration;
-            if (keys['ShiftLeft'] || keys['ShiftRight']) {
-                currentAccel *= this.boostMultiplier;
-            }
+            // Handle Input (Keyboard or Touch)
+            if (touch.active) {
+                // Mobile Touch Logic: Follow Finger
+                this.speed += this.acceleration;
 
-            if (keys['KeyW'] || keys['ArrowUp']) {
-                this.speed += currentAccel;
-            }
-            if (keys['KeyS'] || keys['ArrowDown']) {
-                this.speed -= this.brakeForce;
-            }
+                // Calculate target angle to finger
+                const targetAngle = Math.atan2(touch.y - this.y, touch.x - this.x);
 
-            if (!keys['KeyW'] && !keys['ArrowUp'] && !keys['KeyS'] && !keys['ArrowDown']) {
-                if (this.speed > 0) this.speed -= this.friction;
-                if (this.speed < 0) this.speed += this.friction;
-                if (Math.abs(this.speed) < this.friction) this.speed = 0;
-            }
+                // Smoothly rotate towards target angle
+                let angleDiff = targetAngle - this.angle;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
 
-            const limit = (keys['ShiftLeft'] || keys['ShiftRight']) ? this.maxSpeed * 1.5 : this.maxSpeed;
-            if (this.speed > limit) this.speed = limit;
-            if (this.speed < -this.maxSpeed / 2) this.speed = -this.maxSpeed / 2;
-
-            if (Math.abs(this.speed) > 0.1) {
-                const direction = this.speed > 0 ? 1 : -1;
-                if (keys['KeyA'] || keys['ArrowLeft']) {
-                    this.angle -= this.turnSpeed * direction * (Math.abs(this.speed) / this.maxSpeed + 0.5);
+                this.angle += angleDiff * 0.1;
+            } else {
+                // Keyboard Controls
+                let currentAccel = this.acceleration;
+                if (keys['ShiftLeft'] || keys['ShiftRight']) {
+                    currentAccel *= this.boostMultiplier;
                 }
-                if (keys['KeyD'] || keys['ArrowRight']) {
-                    this.angle += this.turnSpeed * direction * (Math.abs(this.speed) / this.maxSpeed + 0.5);
+
+                if (keys['KeyW'] || keys['ArrowUp']) {
+                    this.speed += currentAccel;
+                }
+                if (keys['KeyS'] || keys['ArrowDown']) {
+                    this.speed -= this.brakeForce;
+                }
+
+                if (!keys['KeyW'] && !keys['ArrowUp'] && !keys['KeyS'] && !keys['ArrowDown']) {
+                    if (this.speed > 0) this.speed -= this.friction;
+                    if (this.speed < 0) this.speed += this.friction;
+                    if (Math.abs(this.speed) < this.friction) this.speed = 0;
+                }
+
+                const limit = (keys['ShiftLeft'] || keys['ShiftRight']) ? this.maxSpeed * 1.5 : this.maxSpeed;
+                if (this.speed > limit) this.speed = limit;
+                if (this.speed < -this.maxSpeed / 2) this.speed = -this.maxSpeed / 2;
+
+                if (Math.abs(this.speed) > 0.1) {
+                    const direction = this.speed > 0 ? 1 : -1;
+                    if (keys['KeyA'] || keys['ArrowLeft']) {
+                        this.angle -= this.turnSpeed * direction * (Math.abs(this.speed) / this.maxSpeed + 0.5);
+                    }
+                    if (keys['KeyD'] || keys['ArrowRight']) {
+                        this.angle += this.turnSpeed * direction * (Math.abs(this.speed) / this.maxSpeed + 0.5);
+                    }
                 }
             }
         } else {
