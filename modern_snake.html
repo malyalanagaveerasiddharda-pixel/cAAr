@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Snake Pro</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.7);
+            --accent-color: #22d3ee;
+            --text-color: #f8fafc;
+            --neon-glow: 0 0 10px rgba(34, 211, 238, 0.8), 0 0 20px rgba(34, 211, 238, 0.4);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .overlay {
+            pointer-events: auto;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+            max-width: 80%;
+        }
+
+        .hidden {
+            display: none;
+            opacity: 0;
+            transform: scale(0.9);
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0 0 1rem 0;
+            background: linear-gradient(to right, #22d3ee, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: var(--neon-glow);
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 2rem;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+            color: var(--accent-color);
+            text-shadow: var(--neon-glow);
+        }
+
+        canvas {
+            background-color: #020617;
+            border-radius: 16px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+            display: block;
+        }
+
+        button {
+            background: linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%);
+            color: #0f172a;
+            border: none;
+            padding: 0.8rem 2rem;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.4);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.6);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        #powerup-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 0.5rem 1rem;
+            background: rgba(0,0,0,0.5);
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #fff;
+            border: 1px solid var(--accent-color);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div class="stats-bar">
+            <span>Score: <span id="score">0</span></span>
+            <span>Best: <span id="best">0</span></span>
+        </div>
+
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+        <div id="powerup-indicator">Power-up Active!</div>
+
+        <div id="ui-layer">
+            <div id="menu-overlay" class="overlay">
+                <h1>NEON SNAKE</h1>
+                <p style="margin-bottom: 2rem; color: #94a3b8;">Use Arrows, WASD, or Swipe to move</p>
+                <button id="start-btn">START GAME</button>
+            </div>
+
+            <div id="game-over-overlay" class="overlay hidden">
+                <h1 style="color: #ef4444; -webkit-text-fill-color: #ef4444;">GAME OVER</h1>
+                <p id="final-score" style="font-size: 1.5rem; margin-bottom: 2rem;">Score: 0</p>
+                <button id="restart-btn">TRY AGAIN</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            gridSize: 20,
+            baseSpeed: 150,
+            minSpeed: 60,
+            speedIncrement: 2,
+            colors: {
+                snakeHead: '#22d3ee',
+                snakeBody: '#0ea5e9',
+                food: '#f43f5e',
+                powerup: {
+                    GOLDEN: '#fbbf24',
+                    SLOW: '#4ade80',
+                    GHOST: '#a855f7'
+                }
+            }
+        };
+
+        class InputHandler {
+            constructor() {
+                this.currentDir = { x: 0, y: 0 };
+                this.nextDir = { x: 0, y: 0 };
+                this.buffer = [];
+
+                window.addEventListener('keydown', (e) => this.handleKey(e));
+                this.initTouch();
+            }
+
+            handleKey(e) {
+                const key = e.code;
+                let dir = null;
+                if ((key === 'ArrowUp' || key === 'KeyW') && this.currentDir.y !== 1) dir = { x: 0, y: -1 };
+                if ((key === 'ArrowDown' || key === 'KeyS') && this.currentDir.y !== -1) dir = { x: 0, y: 1 };
+                if ((key === 'ArrowLeft' || key === 'KeyA') && this.currentDir.x !== 1) dir = { x: -1, y: 0 };
+                if ((key === 'ArrowRight' || key === 'KeyD') && this.currentDir.x !== -1) dir = { x: 1, y: 0 };
+
+                if (dir) {
+                    this.buffer.push(dir);
+                    if (this.buffer.length > 2) this.buffer.shift();
+                }
+            }
+
+            initTouch() {
+                let touchStartX = 0;
+                let touchStartY = 0;
+
+                window.addEventListener('touchstart', (e) => {
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                }, { passive: false });
+
+                window.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                }, { passive: false });
+
+                window.addEventListener('touchend', (e) => {
+                    const dx = e.changedTouches[0].clientX - touchStartX;
+                    const dy = e.changedTouches[0].clientY - touchStartY;
+                    const absX = Math.abs(dx);
+                    const absY = Math.abs(dy);
+
+                    let dir = null;
+                    if (absX > absY) {
+                        if (dx > 30 && this.currentDir.x !== -1) dir = { x: 1, y: 0 };
+                        else if (dx < -30 && this.currentDir.x !== 1) dir = { x: -1, y: 0 };
+                    } else if (absY > absX) {
+                        if (dy > 30 && this.currentDir.y !== -1) dir = { x: 0, y: 1 };
+                        else if (dy < -30 && this.currentDir.y !== -1) dir = { x: 0, y: -1 };
+                    }
+
+                    if (dir) {
+                        this.buffer.push(dir);
+                        if (this.buffer.length > 2) this.buffer.shift();
+                    }
+                });
+            }
+
+            updateDirection() {
+                if (this.buffer.length > 0) {
+                    this.currentDir = this.buffer.shift();
+                }
+                this.nextDir = this.currentDir;
+                return this.currentDir;
+            }
+        }
+
+        class Snake {
+            constructor(gridSize) {
+                this.gridSize = gridSize;
+                this.reset();
+            }
+
+            reset() {
+                this.body = [
+                    { x: 10, y: 10 },
+                    { x: 9, y: 10 },
+                    { x: 8, y: 10 }
+                ];
+                this.dir = { x: 1, y: 0 };
+            }
+
+            move(dir) {
+                this.dir = dir;
+                const head = { ...this.body[0] };
+                head.x += dir.x;
+                head.y += dir.y;
+                this.body.unshift(head);
+            }
+
+            popTail() {
+                this.body.pop();
+            }
+
+            checkCollision(canvasWidth, canvasHeight, isGhost) {
+                const head = this.body[0];
+
+                if (!isGhost) {
+                    if (head.x < 0 || head.x >= canvasWidth / this.gridSize ||
+                        head.y < 0 || head.y >= canvasHeight / this.gridSize) {
+                        return true;
+                    }
+                } else {
+                    // Wrap around if ghost
+                    if (head.x < 0) head.x = (canvasWidth / this.gridSize) - 1;
+                    if (head.x >= canvasWidth / this.gridSize) head.x = 0;
+                    if (head.y < 0) head.y = (canvasHeight / this.gridSize) - 1;
+                    if (head.y >= canvasHeight / this.gridSize) head.y = 0;
+                }
+
+                for (let i = 1; i < this.body.length; i++) {
+                    if (head.x === this.body[i].x && head.y === this.body[i].y) return true;
+                }
+                return false;
+            }
+        }
+
+        class Food {
+            constructor(gridSize, canvasWidth, canvasHeight) {
+                this.gridSize = gridSize;
+                this.width = canvasWidth / gridSize;
+                this.height = canvasHeight / gridSize;
+                this.img = new Image();
+                this.img.src = 'C:/Users/siddu/Pictures/Screenshots/Screenshot 2026-09-27 163420.png';
+                this.spawn();
+            }
+
+            spawn() {
+                this.x = Math.floor(Math.random() * this.width);
+                this.y = Math.floor(Math.random() * this.height);
+
+                this.type = 'NORMAL';
+            }
+
+            isEaten(snakeHead) {
+                return snakeHead.x === this.x && snakeHead.y === this.y;
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.scoreEl = document.getElementById('score');
+                this.bestEl = document.getElementById('best');
+                this.finalScoreEl = document.getElementById('final-score');
+                this.powerupInd = document.getElementById('powerup-indicator');
+
+                // Audio setup
+                this.eatSound = new Audio('C:/Users/siddu/OneDrive/allu arjun laugh.mp3.mpeg');
+
+                this.input = new InputHandler();
+                this.snake = new Snake(CONFIG.gridSize);
+                this.food = new Food(CONFIG.gridSize, this.canvas.width, this.canvas.height);
+
+                this.state = 'MENU';
+                this.score = 0;
+                this.highScore = localStorage.getItem('neonSnakeHighScore') || 0;
+                this.bestEl.innerText = this.highScore;
+
+                this.currentSpeed = CONFIG.baseSpeed;
+                this.lastTick = 0;
+                this.activePowerup = null;
+                this.powerupTimer = 0;
+
+                this.initUI();
+                this.loop = this.loop.bind(this);
+                requestAnimationFrame(this.loop);
+            }
+
+            initUI() {
+                document.getElementById('start-btn').onclick = () => this.start();
+                document.getElementById('restart-btn').onclick = () => this.start();
+            }
+
+            start() {
+                this.state = 'PLAYING';
+                this.score = 0;
+                this.currentSpeed = CONFIG.baseSpeed;
+                this.scoreEl.innerText = '0';
+                this.snake.reset();
+                this.food.spawn();
+                this.activePowerup = null;
+                this.powerupTimer = 0;
+                this.powerupInd.style.opacity = '0';
+
+                document.getElementById('menu-overlay').classList.add('hidden');
+                document.getElementById('game-over-overlay').classList.add('hidden');
+            }
+
+            gameOver() {
+                this.state = 'GAMEOVER';
+                if (this.score > this.highScore) {
+                    this.highScore = this.score;
+                    localStorage.setItem('neonSnakeHighScore', this.highScore);
+                    this.bestEl.innerText = this.highScore;
+                }
+                this.finalScoreEl.innerText = `Score: ${this.score}`;
+                document.getElementById('game-over-overlay').classList.remove('hidden');
+            }
+
+            update(timestamp) {
+                if (this.state !== 'PLAYING') return;
+
+                if (timestamp - this.lastTick < this.currentSpeed) return;
+                this.lastTick = timestamp;
+
+                const dir = this.input.updateDirection();
+                this.snake.move(dir);
+
+                if (this.snake.isEaten(this.food)) {
+                    this.handleEat();
+                    this.food.spawn();
+                } else {
+                    this.snake.popTail();
+                }
+
+                if (this.snake.checkCollision(this.canvas.width, this.canvas.height, this.activePowerup === 'GHOST')) {
+                    this.gameOver();
+                }
+
+                if (this.activePowerup) {
+                    this.powerupTimer -= this.currentSpeed;
+                    if (this.powerupTimer <= 0) {
+                        this.activePowerup = null;
+                        this.powerupInd.style.opacity = '0';
+                    }
+                }
+            }
+
+            handleEat() {
+                this.score += 1;
+                this.scoreEl.innerText = this.score;
+
+                // Play sound
+                this.eatSound.currentTime = 0;
+                this.eatSound.play().catch(e => console.log("Audio play blocked by browser"));
+
+                // Increase difficulty
+                if (this.score % 5 === 0 && this.currentSpeed > CONFIG.minSpeed) {
+                    this.currentSpeed -= CONFIG.speedIncrement;
+                }
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Draw Food
+                this.ctx.shadowBlur = 15;
+                this.ctx.shadowColor = CONFIG.colors.food;
+
+                this.ctx.drawImage(
+                    this.food.img,
+                    this.food.x * CONFIG.gridSize,
+                    this.food.y * CONFIG.gridSize,
+                    CONFIG.gridSize,
+                    CONFIG.gridSize
+                );
+
+                // Draw Snake
+                this.ctx.shadowBlur = 10;
+                const gradient = this.ctx.createLinearGradient(0, 0, this.canvas.width, this.canvas.height);
+                gradient.addColorStop(0, CONFIG.colors.snakeHead);
+                gradient.addColorStop(1, CONFIG.colors.snakeBody);
+
+                this.snake.body.forEach((seg, i) => {
+                    this.ctx.shadowColor = i === 0 ? CONFIG.colors.snakeHead : CONFIG.colors.snakeBody;
+                    this.ctx.fillStyle = i === 0 ? CONFIG.colors.snakeHead : gradient;
+
+                    const r = 4; // rounded corners
+                    const x = seg.x * CONFIG.gridSize + 1;
+                    const y = seg.y * CONFIG.gridSize + 1;
+                    const w = CONFIG.gridSize - 2;
+                    const h = CONFIG.gridSize - 2;
+
+                    this.ctx.beginPath();
+                    this.ctx.roundRect(x, y, w, h, r);
+                    this.ctx.fill();
+                });
+                this.ctx.shadowBlur = 0;
+            }
+
+            loop(timestamp) {
+                this.update(timestamp);
+                this.draw();
+                requestAnimationFrame(this.loop);
+            }
+        }
+
+        // Start the game
+        window.onload = () => new Game();
+    </script>
+</body>
+</html>
